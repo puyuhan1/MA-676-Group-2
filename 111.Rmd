@@ -1,0 +1,228 @@
+---
+title: '111'
+author: "Yuhan Pu"
+date: "2023-10-14"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## R Markdown
+
+This is an R Markdown document. Markdown is a simple formatting syntax for authoring HTML, PDF, and MS Word documents. For more details on using R Markdown see <http://rmarkdown.rstudio.com>.
+
+When you click the **Knit** button a document will be generated that includes both content as well as the output of any embedded R code chunks within the document. You can embed an R code chunk like this:
+
+```{r}
+library(nlme)
+library(lme4)
+library(ggplot2)
+library(dplyr)
+library(esquisse)
+```
+
+
+```{r}
+data<-read.csv('data_all-2.csv')
+data2<-read.csv('Data_table.csv')
+data3<-read.csv('All_data_S.csv')
+```
+
+```{r}
+model1<-glmer(Completion~BMI+Group+Strategy+(1|subject)+(1|Condition),data=data,family=binomial('logit'))
+summary(model1)
+```
+```{r}
+model2<-lmer(TM~BMI+Group+Strategy+(1|subject)+(1|Condition),data=subset(data,Completion==0))
+summary(model2)
+```
+```{r}
+model3<-lmer(MD~BMI+Group+Strategy+(1|subject)+(1|Condition),data=subset(data,Completion==0))
+summary(model3)
+```
+```{r}
+model4<-glmer(Strategy~BMI+Group+(1|subject)+(1|Condition),data=data,family=binomial('logit'))
+summary(model4)
+```
+```{r}
+model5<-glmer(Completion~BMI+Group+Strategy+(1|subject/Condition),data=data,family=binomial('logit'))
+summary(model5)
+```
+```{r}
+ggplot(data,aes(x=as.factor(Strategy),y=BMI))+
+  geom_boxplot()+
+  xlab("Strategy")+
+  ylab("BMI")
+```
+```{r}
+ggplot(data,aes(x=as.factor(Completion),y=BMI))+
+  geom_boxplot()+
+  xlab("Completion")+
+  ylab("BMI")
+```
+
+```{r}
+##Visualize Avg(Strategy) per trial number on y-axis, and Trial Number on the x-axis with confidence bands##
+summary_data <- data3 %>%
+  group_by(trial) %>%
+  summarize(Avg_Strategy = mean(Strategy), 
+            lower = Avg_Strategy - 1.96 * sqrt(Avg_Strategy * (1 - Avg_Strategy) / n()),
+            upper = Avg_Strategy + 1.96 * sqrt(Avg_Strategy * (1 - Avg_Strategy) / n()))
+ggplot(summary_data, aes(x = trial, y = Avg_Strategy))+
+  #geom_line() +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "Trial Number", y = "Avg(Strategy)") +
+  theme_minimal()
+```
+
+
+
+```{r}
+summary_data <- data3 %>%
+  group_by(trial) %>%
+  summarize(Avg_Completion = mean(Completion), 
+            lower = Avg_Completion - 1.96 * sqrt(Avg_Completion * (1 - Avg_Completion) / n()),
+            upper = Avg_Completion + 1.96 * sqrt(Avg_Completion * (1 - Avg_Completion) / n()))
+ggplot(summary_data, aes(x = trial, y = Avg_Completion)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  #geom_line() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "Trial Number", y = "Avg(Completion)") +
+  theme_minimal()
+```
+
+
+```{r}
+##Visualize Condition on y-axis, and Trial Number on the x-axis with confidence bands##
+summary_data <- data3 %>%
+  group_by(trial, condition) %>%
+  summarize(mean = mean(as.numeric(condition)),
+            lower = mean - 1.96 * sd(as.numeric(condition)) / sqrt(n()),
+            upper = mean + 1.96 * sd(as.numeric(condition)) / sqrt(n()),
+            .groups='drop')
+
+# Create a bar plot with confidence intervals
+ggplot(summary_data, aes(x = trial, y = mean, fill = as.factor(condition))) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "Trial Number", y = "Condition") +
+  scale_fill_discrete(name = "Condition") +
+  theme_minimal()
+```
+
+```{r}
+head(data3)
+```
+
+```{r}
+#result <- data3 %>%
+  #group_by(subject) %>%
+  #summarize(Total = sum(Value))
+#Visualize BMI on y-axis, and Age on x-axis
+ggplot(data3, aes(x = age, y = BMI)) +
+  #geom_line(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_point()+
+  geom_smooth(method='lm',se=TRUE) +
+  labs(x = "Age", y = "BMI") +
+  theme_minimal()
+
+
+```
+```{r}
+m1<-glm(data3$TD~data3$sex+data3$BMI+data3$age)
+summary(m1)
+```
+
+
+```{r}
+#Visualize BMI on y-axis, and Gender/Sex on the x-axis
+summary_data <- data3 %>%
+  group_by(sex) %>%
+  summarize(Avg_distance = mean(TD,na.rm=TRUE), 
+            )
+#plot(summary_data)
+
+ggplot(summary_data, aes(x = as.factor(sex), y = Avg_distance) +
+  geom_point() +
+  labs(x = "Sex", y = "Avg(TD)") +
+  theme_minimal())
+```
+
+```{r}
+torf<- data3$Failure==data3$Completion
+count <- length(which(torf == FALSE))
+
+```
+
+```{r}
+subset_data1 <- data3 %>% filter(abort==1 & Failure==0 & Completion==1)
+
+```
+
+```{r}
+subset_data2<-data3%>%filter(condition==4 & Failure == 0)
+```
+
+```{r}
+summary_data <- data3 %>%
+  group_by(age) %>%
+  summarize(Avg_Completion = mean(TD,na.rm=TRUE), 
+            lower = Avg_Completion - 1.96 * sd(as.numeric(TD)) / sqrt(n()),
+            upper = Avg_Completion + 1.96 * sd(as.numeric(TD)) / sqrt(n()),
+            .drop='groups')
+ggplot(summary_data, aes(x = age, y = Avg_Completion)) +
+  geom_point()+
+  #geom_line(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_smooth(method='lm',se=TRUE)+
+  #geom_line() +
+  #geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "age", y = "Avg(TD)") +
+  theme_minimal()
+```
+
+```{r}
+subset_data3 <- data3 %>% filter(Completion==1 & Failure==0)
+
+newdf<-read.csv('age_vs_TD.csv')
+
+
+```
+
+```{r}
+##Strategy VS Avg(TD)##
+summary_data <- data3 %>%
+  group_by(Strategy) %>%
+  summarize(Avg_Completion = mean(TD,na.rm=TRUE), 
+            lower = Avg_Completion - 1.96 * sd(as.numeric(TD),na.rm=TRUE) / sqrt(n()),
+            upper = Avg_Completion + 1.96 * sd(as.numeric(TD),na.rm=TRUE) / sqrt(n()))
+
+
+ggplot(summary_data, aes(x = Strategy, y = Avg_Completion)) +
+  #geom_point(stat = "identity", position = position_dodge(width = 0.8)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  #geom_line() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "Strategy", y = "Avg(TD)") +
+  theme_minimal()
+```
+
+```{r}
+summary_data <- data3 %>%
+  group_by(sex) %>%
+  summarize(Avg_Completion = mean(TD,na.rm=TRUE), 
+            lower = Avg_Completion - 1.96 * sd(as.numeric(TD),na.rm=TRUE) / sqrt(n()),
+            upper = Avg_Completion + 1.96 * sd(as.numeric(TD),na.rm=TRUE) / sqrt(n()))
+summary_data <- summary_data %>%
+  mutate(sex = ifelse(sex == 1, "Female", "Male"))
+
+ggplot(summary_data, aes(x = sex, y = Avg_Completion)) +
+  geom_bar(stat = "identity", position = position_dodge(width = 0.8)) +
+  #geom_line() +
+  geom_errorbar(aes(ymin = lower, ymax = upper), position = position_dodge(width = 0.8), width = 0.2) +
+  labs(x = "sex", y = "Avg(TD)") +
+  theme_minimal()
+```
+

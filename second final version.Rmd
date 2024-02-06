@@ -1,0 +1,439 @@
+---
+title: "Continuous Treatment Mediation Analysis"
+author: "Chenxuan Xiong"
+date: "2023-12-04"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r setup, echo=TRUE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Assume Age is confounder
+
+### Scenario 1: Age, BMI, Strategy are random, total distance based on age, BMI and strategy.
+
+Generate Age, BMI and Strategy randomly.
+```{r}
+set.seed(432)
+BMI1<-rnorm(50,27,3)
+Strategy1<-rbinom(50,3,0.7)
+Strategy1=Strategy1-1
+Age1<-sample(18:60,50,replace=T)
+```
+
+Generate TD based on BMI, Age and Strategy.
+```{r}
+coef_td1 <- rnorm(4)
+error1 <- rnorm(50,0,1)
+TD1 <- coef_td1[1] + coef_td1[2]*BMI1 + coef_td1[3]*Age1 + coef_td1[4]*Strategy1 + error1
+```
+
+Regression on y -- TD: $Y_{i} = \theta_{0} + \theta_{1}A_{i} + \theta_{2}M_{i} + \theta_{3}A_{i} \times M_{i} + \theta'_{4}C_{i} + \varepsilon_{1i}$
+```{r}
+model1 <- glm(TD1 ~ BMI1 + Strategy1 + BMI1*Strategy1 + Age1)
+summary(model1)
+theta1 <- coefficients(model1)
+```
+
+Regression on mediator -- strategy: $M_{i} = \beta_{0} + \beta_{1}A_{i} + \beta'_{2}C_{i} + \varepsilon_{2i}$
+```{r}
+model2 <- glm(Strategy1 ~ BMI1)
+summary(model2)
+beta1<- coefficients(model2)
+```
+
+Calculation for Direct Effect: $NDE = (\theta_{1} + \theta_{3}\beta_{0} + \theta_{3}\beta_{1}a^* + \theta_{3}\beta'_{2}c)(a - a^*)$    
+Calculation for Indirect Effect: $NIE = (\theta_{2}\beta_{1} + \theta_{3}\beta_{1}a)(a - a^*)$   
+NDE is changed based on the level of treatment. I choose the minimum value of the treatment as $a$ to make sure the effect is positive. And $a^*$ is the rest of the BMI. $(a - a^*)$ represents the BMI difference. So the result is the NDE in minimum treatment level. $a$ can be set to any of the BMI values. If it's set to average BMI, the lines will cross in the center of the plot.
+```{r}
+a1 <- min(BMI1)
+a_star1 <- BMI1
+NDE1 <- (theta1[2] + theta1[5]*beta1[1] + theta1[5]*beta1[2]*a_star1)*(a1 - a_star1)
+
+NIE1 <- (theta1[3]*beta1[2] + theta1[5]*beta1[2]*a1)*(a1 - a_star1)
+
+TE1 <- NDE1 + NIE1
+
+plot(a_star1-a1, NDE1, type = "l", col = "blue", lwd = 2, xlab = "a-a*", ylab = "effect", main = " ")
+lines(a_star1-a1, NIE1, type = "l", col = "red", lwd = 2)
+lines(a_star1-a1, TE1, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+```
+
+
+### Scenario 2: Age is random, BMI partially based on age, strategy based on BMI
+Gerenate Age, BMI and Strategy.
+```{r}
+set.seed(123)
+Age2<-sample(18:60,50,replace=T)
+mean_age <- mean(Age2)
+coef_bmi2<-rnorm(2)
+## I added a random value that has the same scale as "coef_bmi2[1] + coef_bmi2[2]*Age2" to reduce effect of Age in generating BMI. If Age is a confounder, BMI should not fully based on Age. I think it should be half based Age and half generated randomly.
+BMI2 <- coef_bmi2[1] + coef_bmi2[2]*Age2 + rnorm(50,0,30)
+coef_str2 <- rnorm(2)
+error3 <- rnorm(50,0,1)
+Strategy2 <- coef_str2[1] + coef_str2[2]*BMI2 + error3
+```
+
+Generate TD based on Age and Strategy.
+```{r}
+coef_td2 <- rnorm(4)
+error4 <- rnorm(50,0,1)
+TD2 <- coef_td2[1] + coef_td2[3]*Strategy2 + coef_td2[4]*Age2 + error4
+```
+
+Regression on TD:
+```{r}
+model3 <- glm(TD2 ~ BMI2 + Strategy2 + BMI2*Strategy2 + Age2)
+summary(model3)
+theta2 <- coefficients(model3)
+```
+
+Regression on Strategy:
+```{r}
+model4 <- glm(Strategy2 ~ BMI2 + Age2)
+summary(model4)
+beta2<- coefficients(model4)
+```
+
+Calculate NDE and NIE and TE
+```{r}
+a2 <- min(BMI2)
+a_star2 <- BMI2
+NDE2 <- (theta2[2] + theta2[5]*beta2[1] + theta2[5]*beta2[2]*a_star2 + theta2[5]*beta2[3]*mean_age)*(a2 - a_star2)
+NIE2 <- (theta2[3]*beta2[2] + theta2[5]*beta2[2]*a2)*(a2-a_star2)
+TE2 <- NDE2 + NIE2
+df2 <- as.data.frame(cbind(a_star2, NDE2,NIE2,TE2))
+df2_sorted <- df2[order(df2$a_star2), ]
+plot(df2_sorted$a_star2-a2, df2_sorted$NDE2, type = "l", col = "blue", lwd = 2, xlab = "a-a*", ylab = "effect", main = " ")
+lines(df2_sorted$a_star2-a2, df2_sorted$NIE2, type = "l", col = "red", lwd = 2)
+lines(df2_sorted$a_star2-a2, df2_sorted$TE2, type = "l", col = "green", lwd = 2)
+legend("topright", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+
+
+
+```
+
+
+
+### Scenario 3
+```{r}
+set.seed(124)
+Age3<-sample(18:60,50,replace=T)
+coef_bmi3<-rnorm(2)
+error5 <- rnorm(50,0,30)
+BMI3 <- coef_bmi3[1] + coef_bmi3[2]*Age3 + error5
+coef_str3 <- rnorm(2)
+error6 <- rnorm(50,0,1)
+Strategy3 <- coef_str3[1] + coef_str3[2]*BMI2 + error6
+
+
+#Generate TD based on strategy and age
+coef_td3 <- rnorm(4)
+error7 <- rnorm(50,0,1)
+TD3 <- coef_td3[1] + coef_td3[2]*BMI3 + coef_td3[3]*Strategy3 + coef_td3[4]*Age3 + error7
+
+
+
+##regression on TD
+model5 <- glm(TD3 ~ BMI3 + Strategy3 + BMI3*Strategy3 + Age3)
+summary(model5)
+theta3 <- coefficients(model5)
+
+model6 <- glm(Strategy3 ~ BMI3 + Age3)
+summary(model6)
+beta3<- coefficients(model6)
+
+
+a3 <- min(BMI3)
+a_star3 <- BMI3
+NDE3 <- (theta3[2] + theta3[5]*beta3[1] + theta3[5]*beta3[2]*a_star3 + theta3[5]*beta3[3]*mean_age)*(a3 - a_star3)
+#NDE2 <- (theta2[2] + theta2[5]*beta2[1] + theta2[5]*beta2[2]*a_star2)*(a2 - a_star2)
+
+NIE3 <- (theta3[3]*beta3[2] + theta3[5]*beta3[2]*a3)*(a3-a_star3)
+
+TE3 <- NDE3 + NIE3
+
+df3 <- as.data.frame(cbind(a_star3, NDE3,NIE3,TE3))
+df3_sorted <- df3[order(df3$a_star3), ]
+
+
+
+plot(df3_sorted$a_star3-a3, df3_sorted$NDE3, type = "l", col = "blue", lwd = 2, xlab = "a-a*", ylab = "effect", main = " ")
+lines(df3_sorted$a_star3-a3, df3_sorted$NIE3, type = "l", col = "red", lwd = 2)
+lines(df3_sorted$a_star3-a3, df3_sorted$TE3, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+
+
+```
+
+
+## Age on X-axis
+### Scenario 1
+
+In scenario 1 since Age won't affect mediator, we set $\beta'_{2}$ as 0. So lines for effects will be horizontal.
+```{r}
+a_star_fix1 <- quantile(BMI1, 0.95)
+a_fix1 <- mean(BMI1)
+NDE4 <- (theta1[2] + theta1[5]*beta1[1] + theta1[5]*beta1[2]*a_star_fix1)*(a_fix1 - a_star_fix1)
+NIE4 <- (theta1[3]*beta1[2] + theta1[5]*beta1[2]*a_fix1)*(a_fix1 - a_star_fix1)
+TE4 <- NDE4 + NIE4
+
+plot(Age1, rep(NDE4,length(Age1)), ylim = c(0,2), type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+lines(Age1, rep(NIE4,length(Age1)), type = "l", col = "red", lwd = 2)
+lines(Age1, rep(TE4,length(Age1)), type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+```
+
+### Scenario 2:
+
+```{r}
+a_star_fix2 <- quantile(BMI2, 0.95)
+a_fix2 <- mean(BMI2)
+NDE5 <- (theta2[2] + theta2[5]*beta2[1] + theta2[5]*beta2[2]*a_star_fix2 + theta2[5]*beta2[3]*Age2)*(a_fix2 - a_star_fix2)
+NIE5 <- (theta2[3]*beta2[2] + theta2[5]*beta2[2]*a_fix2)*(a_fix2-a_star_fix2)
+TE5 <- NDE5 + NIE5
+
+plot(Age2, NDE5, ylim = c(0,85), type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+lines(Age2, rep(NIE5,length(Age2)), type = "l", col = "red", lwd = 2)
+lines(Age2, TE5, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+
+plot(Age2, NDE5, type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+```
+Since the NIE does not exist variable c, it's still horizontal. Although NDE is an upward-sloping line, the value is too small. The plot looks like consists of 3 horizontal lines.
+
+
+## Scenario 3:
+```{r}
+a_star_fix3 <- quantile(BMI3, 0.95)
+a_fix3 <- mean(BMI3)
+NDE6 <- (theta2[2] + theta2[5]*beta2[1] + theta2[5]*beta2[2]*a_star_fix3 + theta2[5]*beta2[3]*Age3)*(a_fix3 - a_star_fix3)
+NIE6 <- (theta2[3]*beta2[2] + theta2[5]*beta2[2]*a_fix3)*(a_fix3-a_star_fix3)
+TE6 <- NDE6 + NIE6
+
+plot(Age2, NDE6, ylim = c(0,100), type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+lines(Age2, rep(NIE6,length(Age2)), type = "l", col = "red", lwd = 2)
+lines(Age2, TE6, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+
+#plot(Age2, NDE5, type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+```
+
+Then we apply the method for calculating NIE and NDE on Chiwan's data.
+
+```{r}
+library (nlme)
+library (lme4)
+library(lmerTest)
+library(mediation)
+library(car)
+library(GGally)
+library(ggplot2)
+df <- read.csv('All_data_S.csv')
+```
+
+
+
+```{r}
+subdf<-subset(df, Completion == 0  & condition %in% c(1, 2, 3, 4))
+```
+First we create the overall model to get the coefficients
+
+```{r}
+realmodel<-lmer(TD~1+(1|subject)+BMI+as.factor(Strategy)+age+BMI*as.factor(Strategy)+condition,data=subdf)
+summary(realmodel)
+```
+
+```{r}
+summary_realmodel<-summary(realmodel)
+realtheta3<-summary_realmodel$coefficients
+realtheta3
+```
+```{r}
+t3 <- realtheta3[, "Estimate"]
+t3
+```
+
+
+
+```{r}
+realsubmodel<-glmer(Strategy~1+(1|subject)+BMI+age+condition,data=subdf,family="binomial")
+summary(realsubmodel)
+```
+
+```{r}
+summary_realsubmodel<-summary(realsubmodel)
+realBeta3<-summary_realsubmodel$coefficients
+realBeta3
+```
+```{r}
+b3 <- realBeta3[, "Estimate"]
+b3
+```
+
+
+```{r}
+a3 <- max(subdf$BMI)
+a_star3 <- subdf$BMI
+
+mean_age<-mean(subdf$age)
+
+NDE3 <- (t3[2] + t3[6]*b3[1] + t3[6]*b3[2]*a_star3 + t3[6]*b3[3]*mean_age)*(a3- a_star3)
+#NDE2 <- (theta2[2] + theta2[5]*beta2[1] + theta2[5]*beta2[2]*a_star2)*(a2 - a_star2)
+
+NIE3 <- (t3[3]*b3[2] + t3[6]*b3[2]*a3)*(a3-a_star3)
+
+TE3 <- NDE3 + NIE3
+
+realdf3 <- as.data.frame(cbind(a_star3, NDE3,NIE3,TE3))
+realdf3_sorted <- realdf3[order(realdf3$a_star3), ]
+plot(a3-realdf3_sorted$a_star3, realdf3_sorted$NDE3,type = "l", col = "blue", lwd = 2, xlab = "a-a*", ylab = "effect", main = " ")
+lines(a3-realdf3_sorted$a_star3, realdf3_sorted$NIE3, type = "l", col = "red", lwd = 2)
+lines(a3-realdf3_sorted$a_star3, realdf3_sorted$TE3, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+```
+
+
+```{r}
+a_star_fix3 <- mean(subdf$BMI)
+a_fix3 <- quantile(subdf$BMI, 0.95)
+NDE6 <- (t3[2] + t3[6]*b3[1] + t3[6]*b3[2]*a_star_fix3 + t3[6]*b3[3]*subdf$age)*(a_fix3 - a_star_fix3)
+NIE6 <- (t3[3]*b3[2] + t3[6]*b3[2]*a_fix3)*(a_fix3-a_star_fix3)
+TE6 <- NDE6 + NIE6
+
+plot(subdf$age, NDE6, ylim=(c(0,100)),type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+lines(subdf$age, rep(NIE6,length(subdf$age)), type = "l", col = "red", lwd = 2)
+lines(subdf$age, TE6, type = "l", col = "green", lwd = 2)
+legend("topleft", legend = c("NDE", "NIE", "TE"), col = c("blue", "red", "green"), lwd = 2)
+
+#plot(subdf$age, NDE5, type = "l", col = "blue", lwd = 2, xlab = "Age", ylab = "effect", main = " ")
+```
+
+for ( i in 1:k){
+sample with replacement
+make sure every patient at least sampled once
+fit models using sample
+get TE NDE NIE per age
+vector TE <- c(TE1,TE2,TE3,…)
+store beta and thetas}
+
+confidence interval
+```{r}
+library(dplyr)
+sampled_df <- df %>%
+  group_by(subject) %>%
+  sample_n(size = 2, replace = TRUE)
+realmodel<-lmer(TD~1+(1|subject)+BMI+as.factor(Strategy)+age+BMI*as.factor(Strategy)+condition,data=sampled_df)
+summary_realmodel<-summary(realmodel)
+realtheta3<-summary_realmodel$coefficients
+t3 <- realtheta3[, "Estimate"]
+a_star3 <-quantile(sampled_df$BMI,c(0.025))
+a3 <- quantile(sampled_df$BMI,c(0.975))
+realsubmodel<-glmer(as.factor(Strategy)~1+(1|subject)+BMI+age+as.factor(condition),data=sampled_df,family="binomial")
+summary_realsubmodel<-summary(realsubmodel)
+realBeta3<-summary_realsubmodel$coefficients
+b3 <- realBeta3[, "Estimate"]
+NDE3 <- (t3[2] + t3[6]*b3[1] + t3[6]*b3[2]*a_star3 + t3[6]*b3[3]*sampled_df$age)*(a3 - a_star3)
+NIE3 <- (t3[3]*b3[2] + t3[6]*b3[2]*a3)*(a3-a_star3)
+TE3 <- NDE3 + NIE3
+```
+
+```{r}
+library(dplyr)
+library(purrr)
+
+# Read the data (replace 'your_file_path.csv' with the actual file path)
+data <- read.csv('All_data_S.csv')
+
+# Function to resample data for each subject
+resample_data <- function(df) {
+  df %>% 
+    group_by(subject) %>% 
+    sample_n(size = 2, replace = TRUE) %>% 
+    ungroup()
+}
+```
+```{r}
+TE <- data.frame()
+for (i in 1:10){
+  current_dataset<-resample_data(data)
+  currentrealmodel<-lmer(TD~1+(1|subject)+BMI+as.factor(Strategy)+age+BMI*as.factor(Strategy)+condition,data=current_dataset)
+  currentrealsubmodel<-glmer(as.factor(Strategy)~1+(1|subject)+BMI+age+condition,data=current_dataset,family="binomial")
+  summary_currentrealmodel<-summary(currentrealmodel)
+  currentrealtheta3<-summary_currentrealmodel$coefficients
+  
+  summary_currentrealsubmodel<-summary(currentrealsubmodel)
+  currentrealBeta3<-summary_currentrealsubmodel$coefficients
+  ct3 <- currentrealtheta3[, "Estimate"]
+  cb3 <- currentrealBeta3[, "Estimate"]
+  a_star3 <-quantile(current_dataset$BMI,c(0.025))
+  a3 <- quantile(current_dataset$BMI,c(0.975))
+
+  age<-current_dataset$age
+
+  NDE3 <- (ct3[2] + ct3[6]*cb3[1] + ct3[6]*cb3[2]*a_star3 + ct3[6]*cb3[3]*age)*(a3- a_star3)
+
+  NIE3 <- (ct3[3]*cb3[2] + ct3[6]*cb3[2]*a3)*(a3-a_star3)
+
+  TE3 <- NDE3 + NIE3
+  
+  TE <- rbind(TE,unique(TE3))}
+```
+
+```{r}
+age <- unique(df$age)
+colnames(TE) <- age
+```
+
+```{r}
+quantiles <- c(0.025, 0.5, 0.975)
+
+result <- apply(TE, 2, quantile, probs = quantiles)
+
+result_df <- as.data.frame(result)
+
+print(result_df)
+```
+
+
+```{r}
+df_ordered <- result_df[, order(colnames(result_df))]
+```
+
+```{r}
+library(tidyverse)
+#plot(x = names(data), y = data[1, ], type = 'o', xlab = "Age", ylab = "Total Effect", main = "Plot of TE by Age")
+#lines(x = names(data),y = data[2, ],type = 'o')
+df_long <- df_ordered %>%
+  gather(key = "Column", value = "Row")
+ggplot(df_long, aes(x = Column, y = Row)) +
+  geom_line() +
+  geom_point() +
+  labs(title = "Lines Based on Rows",
+       x = "Column Names",
+       y = "Values",
+       color = "Row") +
+  theme_minimal()
+```
+
+```{r}
+df_t<-t(df_ordered)
+df_t <- as.data.frame(df_t)
+df_t$ColumnName <- rownames(df_t)
+
+library(reshape2)
+df_melted <- melt(df_t, id.vars = 'ColumnName')
+
+library(ggplot2)
+
+ggplot(data = df_melted, aes(x = as.numeric(ColumnName), y = value, color = variable)) +
+  geom_line() +
+  labs(x = "Age", y = "Effects", title = "Total Effect of Different Quantile") +
+  theme_minimal() +
+  scale_x_continuous(breaks = as.numeric(df_t$ColumnName)) 
+```
+

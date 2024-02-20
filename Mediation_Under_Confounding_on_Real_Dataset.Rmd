@@ -27,6 +27,7 @@ Import the Dataset
 
 ```{r pressure, echo=FALSE}
 data <- read.csv('All_data_S.csv')
+data <- subset(data,Strategy!=2)
 ```
 
 Define Each Variables
@@ -39,6 +40,12 @@ str=sub_data$Strategy
 td=sub_data$TD
 subject=sub_data$subject##be used as the random effect#
 ```
+
+```{r}
+
+```
+
+
 
 Models Among Each Variables (Using random effect)
 
@@ -64,9 +71,13 @@ dat_te_0$bmi = quantile(dat$bmi,0.025)
 
 dat_te_me = dat[c('bmi','age')]
 dat_te_me$bmi = quantile(dat$bmi,0.975)
-dat_te_1$str = predict(mod_str,dat_te_me,type='response')
+predicted_probs <- predict(mod_str, dat_te_me, type='response')
+n <- length(predicted_probs)
+dat_te_1$str <- rbinom(n=n, prob=predicted_probs, size=1)
 dat_te_me$bmi = quantile(dat$bmi,0.025)
-dat_te_0$str = predict(mod_str,dat_te_me,type='response')
+predicted_probs <- predict(mod_str, dat_te_me, type='response')
+n <- length(predicted_probs)
+dat_te_0$str <- rbinom(n=n, prob=predicted_probs, size=1)
 
 TE = mean(predict(mod_td,dat_te_1)-predict(mod_td,dat_te_0))
 ```
@@ -92,8 +103,8 @@ dat_nde_1$bmi = quantile(dat$bmi,0.975)
 dat_nde_0$bmi = quantile(dat$bmi,0.025)
 dat_nde_me = dat[c('bmi','age')]
 dat_nde_me$bmi = quantile(dat$bmi,0.025)
-dat_nde_1$str = predict(mod_str,dat_nde_me,type='response')
-dat_nde_0$str = predict(mod_str,dat_nde_me,type='response')
+dat_nde_1$str = rbinom(n=n,prob = predict(mod_str,dat_nde_me,type='response'),size=1)
+dat_nde_0$str = rbinom(n=n,prob = predict(mod_str,dat_nde_me,type='response'),size=1)
 NDE = mean(predict(mod_td,dat_nde_1)-predict(mod_td,dat_nde_0))
 ```
 
@@ -107,10 +118,10 @@ dat_nie_0$bmi = quantile(dat$bmi,0.025)
 
 dat_nie_me = dat[c('bmi','age')]
 dat_nie_me$bmi = quantile(dat$bmi,0.975)
-dat_nie_1$str = predict(mod_str,dat_nie_me,type='response')
+dat_nie_1$str = rbinom(n=n,prob = predict(mod_str,dat_nie_me,type='response'),size=1)
 
 dat_nie_me$bmi = quantile(dat$bmi,0.025)
-dat_nie_0$str = predict(mod_str,dat_nie_me,type='response')
+dat_nie_0$str = rbinom(n=n,prob = predict(mod_str,dat_nie_me,type='response'),size=1)
 
 NIE = mean(predict(mod_td,dat_nie_1)-predict(mod_td,dat_nie_0))
 ```
@@ -119,5 +130,83 @@ Print the Result
 
 ```{r}
 cat("TE: ",TE, "\nCDE: ",CDE,"\nNDE: ",NDE, "\nNIE: ", NIE)
+```
+By this we noticed that NIE here to small so we need to fit a regression with str~bmi to check its statistical significance.
+```{r}
+a_model<-glmer(str~bmi+(1|subject), data=sub_data,family = binomial(link = 'logit'))
+summary(a_model)
+```
+
+It shows significance even though its coefficient is too small. So we still want to combine strategy=0 and 1 together, and strategy=2 isolated.
+
+
+Then we tried that again with combining strategy 0 and 1 together and 2 isolated and do the whole process again
+```{r}
+data <- read.csv('All_data_S.csv')
+data$Strategy <- ifelse(data$Strategy == 2, 1, 0)
+```
+
+```{r}
+sub_data=subset(data,Completion==0)
+age=sub_data$age
+bmi=sub_data$BMI
+str=sub_data$Strategy
+td=sub_data$TD
+subject=sub_data$subject##be used as the random effect#
+mod_td<-lmer(td~age+str+bmi+(1|subject),data=sub_data)
+mod_bmi<-lmer(bmi~age+(1|subject),data=sub_data)
+mod_str<-glmer(as.factor(str)~bmi+age+(1|subject),data=sub_data,family = binomial(link = 'logit'))
+dat = data.frame(td,age,str,bmi)
+dat_te_1 = dat
+dat_te_0 = dat
+dat_te_1$bmi = quantile(dat$bmi,0.975)
+dat_te_0$bmi = quantile(dat$bmi,0.025)
+
+dat_te_me = dat[c('bmi','age')]
+dat_te_me$bmi = quantile(dat$bmi,0.975)
+predicted_probs <- predict(mod_str, dat_te_me, type='response')
+n <- length(predicted_probs)
+dat_te_1$str <- rbinom(n=n, prob=predicted_probs, size=1)
+dat_te_me$bmi = quantile(dat$bmi,0.025)
+predicted_probs <- predict(mod_str, dat_te_me, type='response')
+n <- length(predicted_probs)
+dat_te_0$str <- rbinom(n=n, prob=predicted_probs, size=1)
+
+TE = mean(predict(mod_td,dat_te_1)-predict(mod_td,dat_te_0))
+dat_cde_1 = dat
+dat_cde_0 = dat
+dat_cde_1$bmi = quantile(dat$bmi,0.975)
+dat_cde_0$bmi = quantile(dat$bmi,0.025)
+dat_cde_1$str = 1
+dat_cde_0$str = 1
+CDE = mean(predict(mod_td,dat_cde_1)-predict(mod_td,dat_cde_0))
+dat_nde_1 = dat
+dat_nde_0 = dat
+dat_nde_1$bmi = quantile(dat$bmi,0.975)
+dat_nde_0$bmi = quantile(dat$bmi,0.025)
+dat_nde_me = dat[c('bmi','age')]
+dat_nde_me$bmi = quantile(dat$bmi,0.025)
+dat_nde_1$str = rbinom(n=n,prob = predict(mod_str,dat_nde_me,type='response'),size=1)
+dat_nde_0$str = rbinom(n=n,prob = predict(mod_str,dat_nde_me,type='response'),size=1)
+NDE = mean(predict(mod_td,dat_nde_1)-predict(mod_td,dat_nde_0))
+dat_nie_1 = dat
+dat_nie_0 = dat
+dat_nie_1$bmi = quantile(dat$bmi,0.025)
+dat_nie_0$bmi = quantile(dat$bmi,0.025)
+
+dat_nie_me = dat[c('bmi','age')]
+dat_nie_me$bmi = quantile(dat$bmi,0.975)
+dat_nie_1$str = rbinom(n=n,prob = predict(mod_str,dat_nie_me,type='response'),size=1)
+
+dat_nie_me$bmi = quantile(dat$bmi,0.025)
+dat_nie_0$str = rbinom(n=n,prob = predict(mod_str,dat_nie_me,type='response'),size=1)
+
+NIE = mean(predict(mod_td,dat_nie_1)-predict(mod_td,dat_nie_0))
+cat("TE: ",TE, "\nCDE: ",CDE,"\nNDE: ",NDE, "\nNIE: ", NIE)
+
+```
+```{r}
+b_model<-lmer(td~bmi+str+(1|subject), data=sub_data)
+summary(b_model)
 ```
 

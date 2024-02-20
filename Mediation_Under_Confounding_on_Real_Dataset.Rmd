@@ -1,0 +1,123 @@
+---
+title: "Mediation Under Confounding on Real Dataset"
+author: "Yuhan Pu"
+date: "2024-02-10"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Import package
+These packages would probably be used in the future
+```{r cars}
+library (nlme)
+library (lme4)
+library(lmerTest)
+library(mediation)
+library(car)
+library(GGally)
+library(ggplot2)
+library(dplyr)
+library(purrr)
+```
+
+Import the Dataset
+
+```{r pressure, echo=FALSE}
+data <- read.csv('All_data_S.csv')
+```
+
+Define Each Variables
+
+```{r}
+sub_data=subset(data,Completion==0)
+age=sub_data$age
+bmi=sub_data$BMI
+str=sub_data$Strategy
+td=sub_data$TD
+subject=sub_data$subject##be used as the random effect#
+```
+
+Models Among Each Variables (Using random effect)
+
+```{r}
+mod_td<-lmer(td~age+str+bmi+(1|subject),data=sub_data)
+mod_bmi<-lmer(bmi~age+(1|subject),data=sub_data)
+mod_str<-glmer(as.factor(str)~bmi+age+(1|subject),data=sub_data,family = binomial(link = 'logit'))
+```
+
+```{r}
+dat = data.frame(td,age,str,bmi)
+```
+
+
+
+Calculating TE: TE=E[Y(1)-Y(0)]
+
+```{r}
+dat_te_1 = dat
+dat_te_0 = dat
+dat_te_1$bmi = quantile(dat$bmi,0.975)
+dat_te_0$bmi = quantile(dat$bmi,0.025)
+
+dat_te_me = dat[c('bmi','age')]
+dat_te_me$bmi = quantile(dat$bmi,0.975)
+dat_te_1$str = predict(mod_str,dat_te_me,type='response')
+dat_te_me$bmi = quantile(dat$bmi,0.025)
+dat_te_0$str = predict(mod_str,dat_te_me,type='response')
+
+TE = mean(predict(mod_td,dat_te_1)-predict(mod_td,dat_te_0))
+```
+
+Calculating CDE: CDE(m)=E[Y(1,m)-Y(0,m)]
+
+```{r}
+dat_cde_1 = dat
+dat_cde_0 = dat
+dat_cde_1$bmi = quantile(dat$bmi,0.975)
+dat_cde_0$bmi = quantile(dat$bmi,0.025)
+dat_cde_1$str = 1
+dat_cde_0$str = 1
+CDE = mean(predict(mod_td,dat_cde_1)-predict(mod_td,dat_cde_0))
+```
+
+Calculating NDE: NDE=E[Y(1,M(0))-Y(0,M(0))]
+
+```{r}
+dat_nde_1 = dat
+dat_nde_0 = dat
+dat_nde_1$bmi = quantile(dat$bmi,0.975)
+dat_nde_0$bmi = quantile(dat$bmi,0.025)
+dat_nde_me = dat[c('bmi','age')]
+dat_nde_me$bmi = quantile(dat$bmi,0.025)
+dat_nde_1$str = predict(mod_str,dat_nde_me,type='response')
+dat_nde_0$str = predict(mod_str,dat_nde_me,type='response')
+NDE = mean(predict(mod_td,dat_nde_1)-predict(mod_td,dat_nde_0))
+```
+
+Calculating NIE: NIE=E[Y(0,M(1))-Y(0,M(0))]
+
+```{r}
+dat_nie_1 = dat
+dat_nie_0 = dat
+dat_nie_1$bmi = quantile(dat$bmi,0.025)
+dat_nie_0$bmi = quantile(dat$bmi,0.025)
+
+dat_nie_me = dat[c('bmi','age')]
+dat_nie_me$bmi = quantile(dat$bmi,0.975)
+dat_nie_1$str = predict(mod_str,dat_nie_me,type='response')
+
+dat_nie_me$bmi = quantile(dat$bmi,0.025)
+dat_nie_0$str = predict(mod_str,dat_nie_me,type='response')
+
+NIE = mean(predict(mod_td,dat_nie_1)-predict(mod_td,dat_nie_0))
+```
+
+Print the Result
+
+```{r}
+cat("TE: ",TE, "\nCDE: ",CDE,"\nNDE: ",NDE, "\nNIE: ", NIE)
+```
+
